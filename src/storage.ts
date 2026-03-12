@@ -21,6 +21,7 @@ export interface TimerState {
   duration: number; // total duration in seconds
   type: "focus" | "short-break" | "long-break" | "meeting";
   sessionCount: number; // completed focus sessions (for long break logic)
+  label?: string;
 }
 
 export interface DailyStats {
@@ -39,6 +40,7 @@ export interface DailyStats {
 const TIMER_KEY = "focus-tracker:timer";
 const SESSIONS_KEY = "focus-tracker:sessions";
 const DAILY_GOAL_KEY = "focus-tracker:daily-goal";
+const LABELS_KEY = "focus-tracker:labels";
 
 // ─── Preferences ─────────────────────────────────────────────────────────────
 
@@ -84,6 +86,34 @@ export async function getDailyGoal(): Promise<number> {
 
 export async function setDailyGoal(goal: number): Promise<void> {
   await LocalStorage.setItem(DAILY_GOAL_KEY, goal.toString());
+}
+
+// ─── Labels ──────────────────────────────────────────────────────────────────
+
+export async function getLabels(): Promise<string[]> {
+  const raw = await LocalStorage.getItem<string>(LABELS_KEY);
+  if (!raw) return [];
+  try {
+    return JSON.parse(raw) as string[];
+  } catch {
+    return [];
+  }
+}
+
+export async function addLabel(label: string): Promise<void> {
+  const labels = await getLabels();
+  const trimmed = label.trim();
+  if (trimmed && !labels.includes(trimmed)) {
+    labels.push(trimmed);
+    labels.sort((a, b) => a.localeCompare(b));
+    await LocalStorage.setItem(LABELS_KEY, JSON.stringify(labels));
+  }
+}
+
+export async function removeLabel(label: string): Promise<void> {
+  const labels = await getLabels();
+  const filtered = labels.filter((l) => l !== label);
+  await LocalStorage.setItem(LABELS_KEY, JSON.stringify(filtered));
 }
 
 // ─── Timer State ─────────────────────────────────────────────────────────────
@@ -218,6 +248,38 @@ export function computeDailyStats(sessions: Session[]): DailyStats {
     longestStreak,
     hourlyBreakdown,
   };
+}
+
+// ─── Label Stats ─────────────────────────────────────────────────────────────
+
+export interface LabelStats {
+  label: string;
+  totalFocusTime: number;
+  sessionsCompleted: number;
+}
+
+export function computeLabelStats(sessions: Session[]): LabelStats[] {
+  const today = localDateString(new Date());
+  const todayFocus = sessions.filter(
+    (s) => localDateString(new Date(s.startedAt)) === today && s.type === "focus",
+  );
+
+  const map = new Map<string, { focusTime: number; completed: number }>();
+  for (const s of todayFocus) {
+    const key = s.label || "Unlabeled";
+    const existing = map.get(key) || { focusTime: 0, completed: 0 };
+    existing.focusTime += s.elapsed;
+    if (s.completed) existing.completed++;
+    map.set(key, existing);
+  }
+
+  return Array.from(map.entries())
+    .map(([label, data]) => ({
+      label,
+      totalFocusTime: data.focusTime,
+      sessionsCompleted: data.completed,
+    }))
+    .sort((a, b) => b.totalFocusTime - a.totalFocusTime);
 }
 
 // ─── Weekly Stats (Monday-based) ─────────────────────────────────────────────

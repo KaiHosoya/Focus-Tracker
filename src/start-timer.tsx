@@ -23,6 +23,9 @@ import {
   getRemaining,
   formatTime,
   formatDuration,
+  getLabels,
+  addLabel,
+  removeLabel,
   TimerState,
   Session,
 } from "./storage";
@@ -35,6 +38,73 @@ const SESSION_LABELS: Record<SessionType, string> = {
   "long-break": "Long Break",
   meeting: "Meeting",
 };
+
+function CreateLabelForm({ onSave }: { onSave: (label: string) => Promise<void> }) {
+  const { pop } = useNavigation();
+  const [value, setValue] = useState("");
+  const trimmed = value.trim();
+  const isValid = trimmed.length > 0 && trimmed.length <= 30;
+
+  return (
+    <Form
+      navigationTitle="Create Label"
+      actions={
+        <ActionPanel>
+          <Action.SubmitForm
+            title="Create"
+            icon={Icon.Plus}
+            onSubmit={async () => {
+              if (isValid) {
+                await onSave(trimmed);
+                pop();
+              }
+            }}
+          />
+        </ActionPanel>
+      }
+    >
+      <Form.TextField
+        id="label"
+        title="Label Name"
+        placeholder="e.g. Work, Side Project, Study"
+        value={value}
+        onChange={setValue}
+        error={!isValid && value.length > 0 ? "Enter 1\u201330 characters" : undefined}
+      />
+    </Form>
+  );
+}
+
+function ManageLabelsView({ labels, onUpdate }: { labels: string[]; onUpdate: () => Promise<void> }) {
+  return (
+    <List navigationTitle="Manage Labels" searchBarPlaceholder="Search labels\u2026">
+      {labels.length === 0 ? (
+        <List.EmptyView title="No Labels" description="Create a label from the Start Timer screen" />
+      ) : (
+        labels.map((lbl) => (
+          <List.Item
+            key={lbl}
+            icon={{ source: Icon.Tag, tintColor: Color.Blue }}
+            title={lbl}
+            actions={
+              <ActionPanel>
+                <Action
+                  title="Delete Label"
+                  icon={Icon.Trash}
+                  style={Action.Style.Destructive}
+                  onAction={async () => {
+                    await removeLabel(lbl);
+                    await onUpdate();
+                  }}
+                />
+              </ActionPanel>
+            }
+          />
+        ))
+      )}
+    </List>
+  );
+}
 
 function CustomDurationForm({
   type,
@@ -90,17 +160,20 @@ export default function StartTimer() {
   };
   const [existing, setExisting] = useState<TimerState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [labels, setLabels] = useState<string[]>([]);
+  const [selectedLabel, setSelectedLabel] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     async function load() {
-      const state = await getTimerState();
+      const [state, savedLabels] = await Promise.all([getTimerState(), getLabels()]);
       setExisting(state);
+      setLabels(savedLabels);
       setIsLoading(false);
     }
     load();
   }, []);
 
-  async function startSession(type: "focus" | "short-break" | "long-break", customDuration?: number) {
+  async function startSession(type: SessionType, customDuration?: number) {
     // If a timer is running, save it as abandoned/completed first
     if (existing && existing.isRunning) {
       const elapsed = getCurrentElapsed(existing);
@@ -112,6 +185,7 @@ export default function StartTimer() {
         elapsed: Math.min(elapsed, existing.duration),
         type: existing.type,
         completed: elapsed >= existing.duration,
+        label: existing.label,
       };
       await addSession(session);
     }
@@ -125,16 +199,18 @@ export default function StartTimer() {
       duration,
       type,
       sessionCount,
+      label: selectedLabel,
     };
     await setTimerState(newState);
 
-    const labels = {
+    const hudLabels: Record<string, string> = {
       focus: "🍅 Focus",
       "short-break": "☕ Short Break",
       "long-break": "🌴 Long Break",
       meeting: "👥 Meeting",
     };
-    await showHUD(`${labels[type]} started: ${formatTime(duration)}`);
+    const labelSuffix = selectedLabel ? ` · ${selectedLabel}` : "";
+    await showHUD(`${hudLabels[type]} started: ${formatTime(duration)}${labelSuffix}`);
 
     // Refresh menu bar immediately
     try {
@@ -161,6 +237,7 @@ export default function StartTimer() {
         elapsed: Math.min(elapsed, existing.duration),
         type: existing.type,
         completed: elapsed >= existing.duration,
+        label: existing.label,
       };
       await addSession(session);
     }
@@ -183,7 +260,7 @@ export default function StartTimer() {
     title: string;
     subtitle: string;
     icon: { source: Icon; tintColor: Color };
-    type: "focus" | "short-break" | "long-break";
+    type: SessionType;
   }[] = [
     {
       id: "focus",
@@ -236,6 +313,67 @@ export default function StartTimer() {
           />
         </List.Section>
       )}
+
+      {/* Label Picker */}
+      <List.Section title="Project Label">
+        <List.Item
+          icon={{ source: Icon.Tag, tintColor: selectedLabel ? Color.Blue : Color.SecondaryText }}
+          title={selectedLabel || "No Label"}
+          subtitle={selectedLabel ? "Selected" : "Optional — tag your session"}
+          accessories={selectedLabel ? [{ tag: { value: selectedLabel, color: Color.Blue } }] : []}
+          actions={
+            <ActionPanel>
+              {labels.map((lbl) => (
+                <Action
+                  key={lbl}
+                  title={`Select "${lbl}"`}
+                  icon={selectedLabel === lbl ? Icon.CheckCircle : Icon.Circle}
+                  onAction={() => setSelectedLabel(selectedLabel === lbl ? undefined : lbl)}
+                />
+              ))}
+              {selectedLabel && (
+                <Action
+                  title="Clear Label"
+                  icon={Icon.XMarkCircle}
+                  onAction={() => setSelectedLabel(undefined)}
+                />
+              )}
+              <Action.Push
+                title="Create New Label…"
+                icon={Icon.Plus}
+                shortcut={{ modifiers: ["cmd"], key: "n" }}
+                target={
+                  <CreateLabelForm
+                    onSave={async (newLabel) => {
+                      await addLabel(newLabel);
+                      const updated = await getLabels();
+                      setLabels(updated);
+                      setSelectedLabel(newLabel);
+                    }}
+                  />
+                }
+              />
+              <Action.Push
+                title="Manage Labels…"
+                icon={Icon.List}
+                shortcut={{ modifiers: ["cmd"], key: "l" }}
+                target={
+                  <ManageLabelsView
+                    labels={labels}
+                    onUpdate={async () => {
+                      const updated = await getLabels();
+                      setLabels(updated);
+                      if (selectedLabel && !updated.includes(selectedLabel)) {
+                        setSelectedLabel(undefined);
+                      }
+                    }}
+                  />
+                }
+              />
+            </ActionPanel>
+          }
+        />
+      </List.Section>
 
       {/* Session type selection */}
       <List.Section title="Start New Session">

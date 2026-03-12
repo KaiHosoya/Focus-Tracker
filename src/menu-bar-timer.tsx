@@ -53,6 +53,7 @@ export default function MenuBarTimer() {
             elapsed: state.duration,
             type: state.type,
             completed: true,
+            label: state.label,
           };
           await addSession(session);
 
@@ -92,8 +93,9 @@ export default function MenuBarTimer() {
     const timeStr = formatTime(remaining);
     const icon = timer.type === "focus" ? "🍅" : timer.type === "meeting" ? "👥" : "☕";
     const label = timer.type === "focus" ? "Focusing" : timer.type === "meeting" ? "Meeting" : "Break";
-    title = `${icon} ${timeStr}`;
-    tooltip = `Focus Tracker - ${label}: ${timeStr} left`;
+    const projectSuffix = timer.label ? ` · ${timer.label}` : "";
+    title = `${icon} ${timeStr}${projectSuffix}`;
+    tooltip = `Focus Tracker - ${label}: ${timeStr} left${timer.label ? ` (${timer.label})` : ""}`;
   } else if (timer && !timer.isRunning && getCurrentElapsed(timer) >= timer.duration) {
     title = timer.type === "focus" ? "✅ Done" : timer.type === "meeting" ? "👥 Done" : "☕ Done";
     tooltip = "Focus Tracker - Session complete! Start next one.";
@@ -123,6 +125,7 @@ export default function MenuBarTimer() {
                     elapsed: Math.min(elapsed, timer.duration),
                     type: timer.type,
                     completed: elapsed >= timer.duration,
+                    label: timer.label,
                   };
                   await addSession(session);
                   await clearTimerState();
@@ -166,6 +169,9 @@ export default function MenuBarTimer() {
       {/* Today's progress */}
       {todayStats && (
         <MenuBarExtra.Section title="Today">
+          {timer && timer.isRunning && timer.label && (
+            <MenuBarExtra.Item title={`Project: ${timer.label}`} icon={Icon.Tag} />
+          )}
           <MenuBarExtra.Item title={`Sessions: ${todayStats.sessions} / ${todayStats.goal}`} icon={Icon.Checkmark} />
           <MenuBarExtra.Item title={`Focus Time: ${formatDuration(todayStats.focusTime)}`} icon={Icon.Clock} />
           <MenuBarExtra.Item

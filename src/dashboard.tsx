@@ -14,6 +14,7 @@ import { useEffect, useState } from "react";
 import {
   clearTimerState,
   computeDailyStats,
+  computeLabelStats,
   computeWeeklyStats,
   formatDuration,
   formatTime,
@@ -100,6 +101,7 @@ export default function Dashboard() {
 
   const daily = computeDailyStats(sessions);
   const weekly = computeWeeklyStats(sessions);
+  const labelStats = computeLabelStats(sessions);
   const now = new Date();
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
@@ -236,8 +238,11 @@ export default function Dashboard() {
               tintColor: timer.type === "focus" ? Color.Red : Color.Green,
             }}
             title={timer.type === "focus" ? "Focus" : timer.type === "short-break" ? "Short Break" : "Long Break"}
-            subtitle={`${formatTime(remaining)} remaining`}
-            accessories={[{ tag: { value: "Running", color: Color.Green } }]}
+            subtitle={`${formatTime(remaining)} remaining${timer.label ? ` · ${timer.label}` : ""}`}
+            accessories={[
+              ...(timer.label ? [{ tag: { value: timer.label, color: Color.Blue } }] : []),
+              { tag: { value: "Running", color: Color.Green } },
+            ]}
             actions={sharedActions}
           />
         </List.Section>
@@ -298,6 +303,25 @@ export default function Dashboard() {
           />
         )}
       </List.Section>
+
+      {/* ─── By Project ────────────────────────────────────────────────── */}
+      {labelStats.length > 0 && (
+        <List.Section title="By Project">
+          {labelStats.map((ls) => (
+            <List.Item
+              key={ls.label}
+              icon={{
+                source: Icon.Tag,
+                tintColor: ls.label === "Unlabeled" ? Color.SecondaryText : Color.Blue,
+              }}
+              title={ls.label}
+              subtitle={`${ls.sessionsCompleted} ${ls.sessionsCompleted === 1 ? "session" : "sessions"}`}
+              accessories={[{ text: formatDuration(ls.totalFocusTime) }]}
+              actions={sharedActions}
+            />
+          ))}
+        </List.Section>
+      )}
 
       {/* ─── Hourly Activity ───────────────────────────────────────────── */}
       {activeHours.length > 0 && (
@@ -412,6 +436,7 @@ export default function Dashboard() {
                 title={`#${todaySessions.length - i}`}
                 subtitle={`Started ${time}`}
                 accessories={[
+                  ...(s.label ? [{ tag: { value: s.label, color: Color.Blue } }] : []),
                   { text: formatDuration(s.elapsed) },
                   {
                     tag: {
