@@ -68,6 +68,13 @@ export default function MenuBarTimer() {
           const emoji = state.type === "focus" ? "✅" : "☕";
           const label = state.type === "focus" ? "Focus complete!" : "Break over!";
           await showHUD(`${emoji} ${label}`);
+
+          // Open Start Timer so the user can pick the next session
+          try {
+            await launchCommand({ name: "start-timer", type: LaunchType.UserInitiated });
+          } catch {
+            // Raycast window may not be focused — user can open manually
+          }
         }
       }
 
@@ -83,11 +90,12 @@ export default function MenuBarTimer() {
   if (timer && timer.isRunning) {
     const remaining = getRemaining(timer);
     const timeStr = formatTime(remaining);
-    const icon = timer.type === "focus" ? "🍅" : "☕";
+    const icon = timer.type === "focus" ? "🍅" : timer.type === "meeting" ? "👥" : "☕";
+    const label = timer.type === "focus" ? "Focusing" : timer.type === "meeting" ? "Meeting" : "Break";
     title = `${icon} ${timeStr}`;
-    tooltip = `Focus Tracker - ${timer.type === "focus" ? "Focusing" : "Break"}: ${timeStr} left`;
+    tooltip = `Focus Tracker - ${label}: ${timeStr} left`;
   } else if (timer && !timer.isRunning && getCurrentElapsed(timer) >= timer.duration) {
-    title = timer.type === "focus" ? "✅ Done" : "☕ Done";
+    title = timer.type === "focus" ? "✅ Done" : timer.type === "meeting" ? "👥 Done" : "☕ Done";
     tooltip = "Focus Tracker - Session complete! Start next one.";
   }
 
@@ -98,8 +106,8 @@ export default function MenuBarTimer() {
         {timer && timer.isRunning ? (
           <>
             <MenuBarExtra.Item
-              title={`${timer.type === "focus" ? "Focusing" : "On Break"}: ${formatTime(getRemaining(timer))}`}
-              icon={timer.type === "focus" ? Icon.Clock : Icon.Pause}
+              title={`${timer.type === "focus" ? "Focusing" : timer.type === "meeting" ? "In Meeting" : "On Break"}: ${formatTime(getRemaining(timer))}`}
+              icon={timer.type === "focus" ? Icon.Clock : timer.type === "meeting" ? Icon.TwoPeople : Icon.Pause}
             />
             <MenuBarExtra.Item
               title="Stop Timer"

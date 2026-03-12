@@ -100,7 +100,8 @@ export default function Dashboard() {
 
   const daily = computeDailyStats(sessions);
   const weekly = computeWeeklyStats(sessions);
-  const today = new Date().toISOString().split("T")[0];
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
   // ─── Timer status ────────────────────────────────────────────────────────
 
@@ -129,7 +130,13 @@ export default function Dashboard() {
 
   // ─── Today's sessions ────────────────────────────────────────────────────
 
-  const todaySessions = sessions.filter((s) => s.startedAt.startsWith(today) && s.type === "focus").reverse();
+  const todaySessions = sessions
+    .filter((s) => {
+      const d = new Date(s.startedAt);
+      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      return dateStr === today && s.type === "focus";
+    })
+    .reverse();
 
   // ─── Shared actions ──────────────────────────────────────────────────────
 
@@ -259,6 +266,15 @@ export default function Dashboard() {
           accessories={[{ text: formatDuration(daily.totalFocusTime) }]}
           actions={sharedActions}
         />
+        {daily.meetingsCompleted > 0 && (
+          <List.Item
+            icon={{ source: Icon.TwoPeople, tintColor: Color.Purple }}
+            title="Meeting Time"
+            subtitle={`${daily.meetingsCompleted} ${daily.meetingsCompleted === 1 ? "meeting" : "meetings"}`}
+            accessories={[{ text: formatDuration(daily.totalMeetingTime) }]}
+            actions={sharedActions}
+          />
+        )}
         {sessionsRemaining > 0 && (
           <List.Item
             icon={{ source: Icon.ArrowRight, tintColor: Color.Purple }}
