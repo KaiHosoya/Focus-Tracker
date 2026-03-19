@@ -259,9 +259,7 @@ export interface LabelStats {
 
 export function computeLabelStats(sessions: Session[]): LabelStats[] {
   const today = localDateString(new Date());
-  const todayFocus = sessions.filter(
-    (s) => localDateString(new Date(s.startedAt)) === today && s.type === "focus",
-  );
+  const todayFocus = sessions.filter((s) => localDateString(new Date(s.startedAt)) === today && s.type === "focus");
 
   const map = new Map<string, { focusTime: number; completed: number }>();
   for (const s of todayFocus) {

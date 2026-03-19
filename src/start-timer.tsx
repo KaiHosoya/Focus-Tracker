@@ -332,11 +332,7 @@ export default function StartTimer() {
                 />
               ))}
               {selectedLabel && (
-                <Action
-                  title="Clear Label"
-                  icon={Icon.XMarkCircle}
-                  onAction={() => setSelectedLabel(undefined)}
-                />
+                <Action title="Clear Label" icon={Icon.XMarkCircle} onAction={() => setSelectedLabel(undefined)} />
               )}
               <Action.Push
                 title="Create New Label…"

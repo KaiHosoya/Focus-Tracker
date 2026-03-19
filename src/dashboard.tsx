@@ -12,6 +12,7 @@ import {
 } from "@raycast/api";
 import { useEffect, useState } from "react";
 import {
+  addSession,
   clearTimerState,
   computeDailyStats,
   computeLabelStats,
@@ -19,6 +20,7 @@ import {
   formatDuration,
   formatTime,
   getDailyGoal,
+  getLabels,
   getRemaining,
   getSessions,
   getTimerState,
@@ -26,6 +28,86 @@ import {
   Session,
   TimerState,
 } from "./storage";
+
+// ─── Log Past Session Form ───────────────────────────────────────────────────
+
+function LogPastSessionForm({ labels, onSave }: { labels: string[]; onSave: () => Promise<void> }) {
+  const { pop } = useNavigation();
+
+  const defaultStart = new Date(Date.now() - 30 * 60 * 1000); // 30 min ago
+  const [startedAt, setStartedAt] = useState<Date>(defaultStart);
+  const [duration, setDuration] = useState("30");
+  const [type, setType] = useState<Session["type"]>("focus");
+  const [label, setLabel] = useState("");
+  const [completed, setCompleted] = useState(true);
+
+  const parsedDuration = parseInt(duration);
+  const isDurationValid = !isNaN(parsedDuration) && parsedDuration >= 1 && parsedDuration <= 999;
+
+  return (
+    <Form
+      navigationTitle="Log Past Session"
+      actions={
+        <ActionPanel>
+          <Action.SubmitForm
+            title="Save Session"
+            icon={Icon.Plus}
+            onSubmit={async () => {
+              if (!isDurationValid) return;
+              const durationSecs = parsedDuration * 60;
+              const endedAt = new Date(startedAt.getTime() + durationSecs * 1000);
+              const session: Session = {
+                id: Date.now().toString(),
+                startedAt: startedAt.toISOString(),
+                endedAt: endedAt.toISOString(),
+                duration: durationSecs,
+                elapsed: durationSecs,
+                type,
+                completed,
+                label: label || undefined,
+              };
+              await addSession(session);
+              await showHUD("✅ Session logged");
+              pop();
+              await onSave();
+            }}
+          />
+        </ActionPanel>
+      }
+    >
+      <Form.DatePicker
+        id="startedAt"
+        title="Started At"
+        type={Form.DatePicker.Type.DateTime}
+        value={startedAt}
+        onChange={(d) => d && setStartedAt(d)}
+      />
+      <Form.TextField
+        id="duration"
+        title="Duration (minutes)"
+        placeholder="e.g. 30"
+        value={duration}
+        onChange={setDuration}
+        error={!isDurationValid && duration.length > 0 ? "Enter a number between 1 and 999" : undefined}
+      />
+      <Form.Dropdown id="type" title="Type" value={type} onChange={(v) => setType(v as Session["type"])}>
+        <Form.Dropdown.Item value="focus" title="Focus" icon="🍅" />
+        <Form.Dropdown.Item value="meeting" title="Meeting" icon="👥" />
+        <Form.Dropdown.Item value="short-break" title="Short Break" icon="☕" />
+        <Form.Dropdown.Item value="long-break" title="Long Break" icon="🌴" />
+      </Form.Dropdown>
+      {labels.length > 0 && (
+        <Form.Dropdown id="label" title="Label" value={label} onChange={setLabel}>
+          <Form.Dropdown.Item value="" title="None" />
+          {labels.map((l) => (
+            <Form.Dropdown.Item key={l} value={l} title={l} />
+          ))}
+        </Form.Dropdown>
+      )}
+      <Form.Checkbox id="completed" label="Completed" value={completed} onChange={setCompleted} />
+    </Form>
+  );
+}
 
 // ─── Goal Edit Form ─────────────────────────────────────────────────────────
 
@@ -76,13 +158,15 @@ export default function Dashboard() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [timer, setTimer] = useState<TimerState | null>(null);
   const [dailyGoal, setDailyGoalState] = useState<number>(8);
+  const [labels, setLabels] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   async function reload() {
-    const [s, t, g] = await Promise.all([getSessions(), getTimerState(), getDailyGoal()]);
+    const [s, t, g, l] = await Promise.all([getSessions(), getTimerState(), getDailyGoal(), getLabels()]);
     setSessions(s);
     setTimer(t);
     setDailyGoalState(g);
+    setLabels(l);
   }
 
   useEffect(() => {
@@ -154,6 +238,12 @@ export default function Dashboard() {
             await showHUD("Could not open Start Timer");
           }
         }}
+      />
+      <Action.Push
+        title="Log Past Session"
+        icon={Icon.Clock}
+        shortcut={{ modifiers: ["cmd"], key: "l" }}
+        target={<LogPastSessionForm labels={labels} onSave={reload} />}
       />
       {isTimerRunning && (
         <Action
